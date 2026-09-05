@@ -8,6 +8,7 @@ compound-eye-camera プロジェクトのブラウザ試作を公開する場所
 
 - [Studio (Tone.js版)](https://naotake.github.io/compound-eye-web/studio/) — 画像の特徴量から音を生成するスタジオ
 - [Karplus-Strong v1](https://naotake.github.io/compound-eye-web/studio/karplus_strong_v1.html) — 弦モデル音源の初期試作
+- [Camera Sound (Pure Data / WebPD版・最新)](https://naotake.github.io/compound-eye-web/pd-camera/) — カメラ映像から Pure Data パッチ（WebPD/wasm）で音を生成、カメラ許可が必要
 
 ## 構成
 

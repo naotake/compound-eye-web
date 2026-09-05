@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>compound-eye camera sound</title>
+    <style>
+        body { background: #111; color: #eee; font-family: monospace; margin: 0; padding: 16px; }
+        h1 { font-size: 1rem; margin-bottom: 8px; }
+        #video { width: 320px; height: 240px; background: #222; display: block; }
+        #canvas { display: none; }
+        #info { margin-top: 8px; font-size: 0.8rem; color: #aaa; }
+        #start-btn { margin-top: 12px; padding: 8px 24px; font-size: 1rem; cursor: pointer; }
+        #loading { color: #888; margin-top: 8px; }
+    </style>
+</head>
+<body>
+    <h1>compound-eye camera sound</h1>
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas" width="200" height="150"></canvas>
+    <div id="loading">Loading patch...</div>
+    <button id="start-btn" style="display:none">▶ Start</button>
+    <div id="info">—</div>
+
+    <script src="webpd-runtime.js"></script>
+    <script src="features.js"></script>
+    <script>
+        // --- WebPd node IDs (from compiled patch) ---
+        const NODE_TEMPO = 'n_0_1';
+        const NODE_PITCH = 'n_0_3';
+
+        // --- Scale: C major MIDI notes (C3-C5) ---
+        const C_MAJOR = [48,50,52,53,55,57,59,60,62,64,65,67,69,71,72];
+
+        const videoEl = document.getElementById('video');
+        const canvasEl = document.getElementById('canvas');
+        const ctx2d = canvasEl.getContext('2d');
+        const infoEl = document.getElementById('info');
+        const loadingEl = document.getElementById('loading');
+        const startBtn = document.getElementById('start-btn');
+
+        const audioContext = new AudioContext();
+        let patch = null;
+        let webpdNode = null;
+
+        const sendMsgToWebPd = (nodeId, portletId, message) => {
+            if (!webpdNode) return;
+            webpdNode.port.postMessage({
+                type: 'io:messageReceiver',
+                payload: { nodeId, portletId, message },
+            });
+        };
+
+        // --- Feature extraction from current video frame ---
+        const extractFromFrame = () => {
+            ctx2d.drawImage(videoEl, 0, 0, canvasEl.width, canvasEl.height);
+            // extractFeatures expects an image-like with naturalWidth/width
+            const fakeImg = {
+                width: canvasEl.width, height: canvasEl.height,
+                naturalWidth: canvasEl.width, naturalHeight: canvasEl.height,
+            };
+            // Override: draw into a fresh canvas and use that
+            const tmp = document.createElement('canvas');
+            tmp.width = canvasEl.width; tmp.height = canvasEl.height;
+            tmp.getContext('2d').drawImage(videoEl, 0, 0, tmp.width, tmp.height);
+            return window.extractFeatures(tmp);
+        };
+
+        // --- Map features to PD parameters ---
+        const featuresToPd = (f) => {
+            // tempo: brightness_variance -> fast(200ms) to slow(1200ms)
+            const bv = f.brightness_variance || 0;
+            const tempo = Math.round(200 + (1 - bv) * 1000);
+
+            // pitch: hue_mean -> pick from C major scale
+            const hm = f.hue_mean || 0;
+            const scaleIdx = Math.floor(hm * C_MAJOR.length) % C_MAJOR.length;
+            const pitch = C_MAJOR[scaleIdx];
+
+            return { tempo, pitch };
+        };
+
+        // --- Update loop ---
+        let updateInterval = null;
+        const startUpdateLoop = () => {
+            updateInterval = setInterval(() => {
+                try {
+                    const f = extractFromFrame();
+                    const { tempo, pitch } = featuresToPd(f);
+                    sendMsgToWebPd(NODE_TEMPO, '0', [tempo]);
+                    sendMsgToWebPd(NODE_PITCH, '0', [pitch]);
+                    infoEl.textContent = `tempo=${tempo}ms  pitch=${pitch}(${noteName(pitch)})  bv=${f.brightness_variance.toFixed(2)}  hue=${f.hue_mean.toFixed(2)}`;
+                } catch(e) {
+                    infoEl.textContent = 'error: ' + e.message;
+                }
+            }, 200);
+        };
+
+        const noteName = (midi) => {
+            const names = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+            return names[midi % 12] + Math.floor(midi / 12 - 1);
+        };
+
+        // --- Init ---
+        const initApp = async () => {
+            // Camera
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                videoEl.srcObject = stream;
+            } catch(e) {
+                infoEl.textContent = 'camera error: ' + e.message;
+            }
+
+            // WebPd patch
+            await WebPdRuntime.initialize(audioContext);
+            const response = await fetch('patch.wasm');
+            patch = await response.arrayBuffer();
+
+            loadingEl.style.display = 'none';
+            startBtn.style.display = 'inline-block';
+        };
+
+        const startApp = async () => {
+            if (audioContext.state === 'suspended') audioContext.resume();
+
+            webpdNode = await WebPdRuntime.run(
+                audioContext,
+                patch,
+                WebPdRuntime.defaultSettingsForRun('./patch.wasm', () => {}),
+            );
+            webpdNode.connect(audioContext.destination);
+
+            startBtn.style.display = 'none';
+            startUpdateLoop();
+        };
+
+        startBtn.onclick = startApp;
+        initApp().then(() => console.log('ready'));
+    </script>
+</body>
+</html>
