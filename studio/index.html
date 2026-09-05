@@ -1,0 +1,2020 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Compound Eye Studio</title>
+<script src="https://unpkg.com/tone@14.7.77/build/Tone.js"></script>
+<script src="features.js" defer></script>
+<script src="scope.js" defer></script>
+<script src="generators.js" defer></script>
+<script src="melody.js" defer></script>
+<style>
+  :root {
+    --bg: #1a1a20;
+    --panel: #2a2a35;
+    --accent: #6ab0ff;
+    --text: #e8e8f0;
+    --muted: #9090a0;
+    --good: #7acc7a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  header {
+    padding: 12px 20px;
+    background: var(--panel);
+    border-bottom: 1px solid #3a3a45;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  header h1 { margin: 0; font-size: 18px; font-weight: 500; }
+  header .status { font-size: 12px; color: var(--muted); }
+  main {
+    padding: 20px;
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    gap: 20px;
+  }
+  .panel {
+    background: var(--panel);
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .panel h2 {
+    margin: 0 0 12px;
+    font-size: 14px;
+    color: var(--accent);
+    border-bottom: 1px solid #3a3a45;
+    padding-bottom: 6px;
+  }
+  #dropZone {
+    border: 2px dashed #555;
+    border-radius: 6px;
+    padding: 20px;
+    text-align: center;
+    color: var(--muted);
+    cursor: pointer;
+    transition: border 0.2s, background 0.2s;
+    min-height: 180px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+  }
+  #dropZone.active {
+    border-color: var(--accent);
+    background: rgba(106, 176, 255, 0.05);
+  }
+  #dropZone img {
+    max-width: 100%;
+    max-height: 220px;
+    object-fit: contain;
+    border-radius: 4px;
+  }
+  #dropZone.has-image {
+    padding: 8px;
+  }
+  .features {
+    margin-top: 16px;
+    font-size: 12px;
+    line-height: 1.8;
+  }
+  .features dt {
+    color: var(--muted);
+    display: inline-block;
+    width: 110px;
+  }
+  .features dd {
+    display: inline-block;
+    margin: 0;
+    color: var(--text);
+  }
+  .features .bar {
+    display: inline-block;
+    width: 120px;
+    height: 8px;
+    background: #3a3a45;
+    border-radius: 4px;
+    margin-left: 8px;
+    vertical-align: middle;
+    position: relative;
+  }
+  .features .bar > span {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    border-radius: 4px;
+  }
+  .sound-status {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 10px;
+  }
+  .action-row {
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  button {
+    background: var(--accent);
+    color: #0a0a10;
+    border: none;
+    padding: 8px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  button:hover { filter: brightness(1.1); }
+  button.secondary {
+    background: #3a3a45;
+    color: var(--text);
+  }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .mapping {
+    font-size: 11px;
+    color: var(--muted);
+    background: #1e1e28;
+    padding: 8px;
+    border-radius: 4px;
+    margin-top: 12px;
+  }
+  .mapping code { color: var(--good); }
+
+  /* Step 2: layers */
+  .layers {
+    margin-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .layer {
+    background: #1e1e28;
+    border-radius: 6px;
+    padding: 10px 12px;
+    border-left: 3px solid #3a3a45;
+    transition: border-color 0.15s;
+  }
+  .layer.active { border-left-color: var(--accent); }
+  .layer.master { border-left-color: var(--good); }
+  .layer-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
+  .layer-toggle { cursor: pointer; user-select: none; }
+  .layer-toggle input { margin-right: 6px; vertical-align: middle; }
+  .layer-meter {
+    display: inline-block;
+    width: 60px; height: 6px;
+    background: #2a2a35; border-radius: 3px; overflow: hidden;
+  }
+  .layer-meter > span {
+    display: block; height: 100%; background: var(--good);
+    width: 0%; transition: width 0.05s;
+  }
+  .layer-params {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 14px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .layer-params label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .layer-params input[type="range"] {
+    flex: 1; min-width: 0;
+  }
+  .layer-params select {
+    background: #2a2a35; color: var(--text);
+    border: 1px solid #3a3a45; border-radius: 3px;
+    padding: 2px 4px; font-size: 11px;
+  }
+  .sample-row {
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  button.mini {
+    padding: 3px 8px; font-size: 11px;
+  }
+  .sync-row {
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid #3a3a45;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .sync-hint { font-size: 11px; color: var(--muted); }
+
+  /* Feature visualization */
+  .block-grid-row {
+    display: flex;
+    gap: 16px;
+    margin: 10px 0;
+    flex-wrap: wrap;
+  }
+  .block-grid-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .block-grid-label {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .block-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 32px);
+    grid-template-rows: repeat(3, 32px);
+    gap: 2px;
+    background: #0f0f1a;
+    padding: 2px;
+    border-radius: 3px;
+  }
+  .block-grid > div {
+    border-radius: 2px;
+    background: #1a1a28;
+    position: relative;
+  }
+  .block-grid > div > span {
+    position: absolute;
+    bottom: 1px;
+    right: 2px;
+    font-size: 9px;
+    color: rgba(255,255,255,0.6);
+    text-shadow: 0 0 2px #000;
+  }
+  .feature-diff {
+    margin: 8px 0;
+    padding: 6px 10px;
+    background: #161625;
+    border-radius: 4px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .diff-label { color: #8888aa; margin-right: 6px; }
+  .feature-diff strong { color: #cfd3ff; }
+  .feature-detail {
+    margin: 8px 0;
+    background: #161625;
+    padding: 6px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+  }
+  .feature-detail summary {
+    cursor: pointer;
+    color: #a0a0c0;
+    user-select: none;
+  }
+  .feature-detail summary:hover { color: #cfd3ff; }
+  .feature-dump {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 2px 10px;
+    margin: 8px 0 0 0;
+    font-family: monospace;
+    font-size: 10.5px;
+  }
+  .feature-dump dt { color: #8888aa; }
+  .feature-dump dd {
+    color: #cfd3ff;
+    margin: 0;
+  }
+  .feature-dump dd.diff-changed { color: #a0e0a0; }
+
+  /* Section titles for MUSIC ENGINE / TEXTURE / MASTER / MODULATION */
+  .section-title {
+    font-size: 13px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #cfd3ff;
+    margin: 18px 0 10px 0;
+    padding: 8px 10px;
+    background: linear-gradient(90deg, #2a2a45, #1e1e30);
+    border-left: 3px solid #7a9acc;
+    border-radius: 4px;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .section-title:first-of-type { margin-top: 6px; }
+  .section-hint {
+    font-size: 11px;
+    color: var(--muted);
+    font-weight: normal;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  /* Oscilloscope */
+  .scope {
+    width: 100%;
+    height: 100px;
+    background: #14141c;
+    border-radius: 6px;
+    display: block;
+    margin: 10px 0;
+    border: 1px solid #2a2a35;
+  }
+
+  /* Generators section */
+  .gen-list { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+  .gen-row {
+    background: #1e1e28;
+    border-radius: 6px;
+    padding: 10px 12px;
+    border-left: 3px solid #3a3a45;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .gen-row.active { border-left-color: #c67acc; }
+  .gen-top {
+    display: grid;
+    grid-template-columns: 30px 1fr 1fr 1fr auto;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+  .gen-top strong { color: var(--text); }
+  .gen-top select {
+    background: #2a2a35; color: var(--text);
+    border: 1px solid #3a3a45; border-radius: 3px;
+    padding: 2px 4px; font-size: 11px;
+    width: 100%;
+  }
+  .gen-top button.del-gen {
+    background: #553a3a; color: var(--text);
+    padding: 2px 8px; font-size: 11px;
+  }
+  .gen-params {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 14px;
+  }
+  .gen-params label { display: flex; align-items: center; gap: 6px; }
+  .gen-params input[type=range] { flex: 1; min-width: 0; }
+  .gen-params .param-val { font-size: 10px; color: var(--text); width: 40px; text-align: right; }
+
+  /* LFO section */
+  .lfo-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .lfo-row {
+    background: #1e1e28;
+    border-radius: 6px;
+    padding: 8px 10px;
+    display: grid;
+    grid-template-columns: 40px 38px 1fr 80px 1fr 1fr;
+    gap: 8px;
+    align-items: center;
+    font-size: 11px;
+    color: var(--muted);
+    border-left: 3px solid #3a3a45;
+  }
+  .lfo-row.active { border-left-color: #d4a574; }
+  .lfo-row .lfo-num { color: var(--text); font-weight: bold; font-size: 12px; }
+  .lfo-row label { display: flex; align-items: center; gap: 4px; min-width: 0; }
+  .lfo-row input[type=range] { flex: 1; min-width: 0; }
+  .lfo-row select {
+    background: #2a2a35; color: var(--text);
+    border: 1px solid #3a3a45; border-radius: 3px;
+    padding: 2px 4px; font-size: 11px;
+    max-width: 100%;
+  }
+  .lfo-row .lfo-viz {
+    width: 40px; height: 16px;
+    background: #2a2a35; border-radius: 3px;
+    position: relative; overflow: hidden;
+  }
+  .lfo-row .lfo-viz::after {
+    content: ''; position: absolute; left: 0; top: 50%;
+    width: 4px; height: 4px; background: #d4a574;
+    border-radius: 50%; transform: translate(0, -50%);
+    transition: left 0.05s linear;
+  }
+  main { grid-template-columns: 380px 1fr; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>✒️ Compound Eye Studio <span style="color:var(--muted);font-size:13px;">— prototype</span></h1>
+  <div class="status" id="statusLine">audio: idle</div>
+</header>
+
+<main>
+  <!-- 左カラム: 画像 + 特徴量 -->
+  <div class="panel">
+    <h2>IMAGE INPUT</h2>
+    <div id="dropZone">
+      <span id="dropLabel">ここに画像をドラッグ&ドロップ<br>またはクリックして選択</span>
+      <input type="file" id="fileInput" accept="image/*" style="display:none">
+    </div>
+
+    <dl class="features" id="features">
+      <dt>brightness</dt><dd><span class="bar"><span id="bar-brightness"></span></span> <span id="val-brightness">—</span></dd><br>
+      <dt>saturation</dt><dd><span class="bar"><span id="bar-saturation"></span></span> <span id="val-saturation">—</span></dd><br>
+      <dt>edge density</dt><dd><span class="bar"><span id="bar-edge"></span></span> <span id="val-edge">—</span></dd><br>
+      <dt>hue mean</dt><dd><span class="bar"><span id="bar-hue-mean"></span></span> <span id="val-hue-mean">—</span></dd><br>
+      <dt>hue variance</dt><dd><span class="bar"><span id="bar-hue-var"></span></span> <span id="val-hue-var">—</span></dd>
+    </dl>
+
+    <!-- 3x3 block visualization -->
+    <div class="block-grid-row">
+      <div class="block-grid-wrap">
+        <div class="block-grid-label">輝度マップ (3×3)</div>
+        <div class="block-grid" id="grid-brightness"></div>
+      </div>
+      <div class="block-grid-wrap">
+        <div class="block-grid-label">エッジマップ (3×3)</div>
+        <div class="block-grid" id="grid-edge"></div>
+      </div>
+    </div>
+
+    <!-- Feature diff vs previous -->
+    <div class="feature-diff" id="feature-diff">
+      <span class="diff-label">前回との差分:</span>
+      <span id="diff-summary">—</span>
+    </div>
+
+    <details class="feature-detail">
+      <summary>詳細特徴量 (42項目)</summary>
+      <dl id="feature-dump" class="feature-dump"></dl>
+    </details>
+
+    <div class="mapping" id="mappingView">
+      画像を読み込むと、音楽パラメータへのマッピング結果がここに表示されます。
+    </div>
+  </div>
+
+  <!-- 右カラム: サウンドエンジン制御 -->
+  <div class="panel">
+    <h2>SOUND ENGINE</h2>
+    <p class="sound-status" id="engineStatus">画像を読み込んでから Start を押してください。</p>
+    <div class="action-row">
+      <button id="btnStart">▶ Start</button>
+      <button id="btnStop" class="secondary">■ Stop</button>
+      <button id="btnPanic" class="secondary">Panic (all off)</button>
+    </div>
+
+    <canvas id="scope" class="scope" width="600" height="100"></canvas>
+
+    <!-- ==================== MUSIC ENGINE (主役: メロディ・コード・ベース) ==================== -->
+    <h3 class="section-title">🎼 MUSIC ENGINE <span class="section-hint">音楽要素 (lead / harmony / bass)</span></h3>
+
+    <div class="sync-row">
+      <button id="btnApplyMapping" class="secondary">🎨 Apply image mapping</button>
+      <label style="font-size:0.88em;opacity:0.85">
+        <input type="checkbox" id="mapping-jitter" checked> salt (一回性、微細なばらつき)
+      </label>
+      <span class="sync-hint">画像の特徴量を key/scale/centerへ反映</span>
+    </div>
+
+    <!-- Key / Scale shuffle controls (roster は保持) -->
+    <div class="sync-row" style="margin-top:6px;gap:10px;flex-wrap:wrap">
+      <span class="sync-hint" style="font-size:0.85em;opacity:0.75;margin-right:2px">転調:</span>
+      <button id="btnShift5thUp" class="secondary" title="circle of 5ths を 1 ステップ上 (完全 5 度上)">♯ 5度↑</button>
+      <button id="btnShift5thDown" class="secondary" title="circle of 5ths を 1 ステップ下 (完全 5 度下)">♭ 5度↓</button>
+      <span class="sync-hint" style="font-size:0.85em;opacity:0.75;margin-left:6px;margin-right:2px">モード:</span>
+      <button id="btnModePrev" class="secondary" title="modal ring を明るい方へ (ex: dorian → mixolydian)">◀ mode</button>
+      <button id="btnModeNext" class="secondary" title="modal ring を暗い方へ (ex: dorian → aeolian)">mode ▶</button>
+      <span class="sync-hint" style="font-size:0.85em;opacity:0.75;margin-left:6px;margin-right:2px">検証:</span>
+      <button id="btnWarpKey" class="secondary" title="tonic をランダムに飛ばす (法則性無し、比較用)">🎲 Warp Key</button>
+      <span class="sync-hint" style="font-size:0.85em;opacity:0.75;margin-left:6px;margin-right:2px">音色構成:</span>
+      <button id="btnShuffleRoster" class="secondary" title="key/scale は固定したまま、roster (generator の instrument 構成) だけ再抽選">🎨 Shuffle Roster</button>
+    </div>
+
+    <div class="action-row" style="margin:8px 0">
+      <button id="btnAddGen" class="secondary">+ Add generator</button>
+      <span class="sync-hint">レイヤーごとに method / instrument を選択</span>
+    </div>
+    <div id="genList" class="gen-list"></div>
+
+    <!-- ==================== TEXTURE (背景音: ドローン・粒状) ==================== -->
+    <h3 class="section-title" style="margin-top:20px">🌫️ TEXTURE <span class="section-hint">環境音レイヤー (drone / granular)</span></h3>
+
+    <div class="layers">
+      <!-- Drone -->
+      <div class="layer" data-layer="drone">
+        <div class="layer-head">
+          <label class="layer-toggle"><input type="checkbox" id="ly-drone-on" checked> <strong>DRONE</strong> (倍音パッド)</label>
+          <span class="layer-meter" id="ly-drone-meter"></span>
+        </div>
+        <div class="layer-params">
+          <label>gain <input type="range" id="ly-drone-gain" min="0" max="1" step="0.01" value="0.5"></label>
+          <label>density <input type="range" id="ly-drone-density" min="0.1" max="2" step="0.05" value="0.6"></label>
+          <label>voice length (s) <input type="range" id="ly-drone-voice" min="2" max="12" step="0.5" value="6"></label>
+          <label>brightness <input type="range" id="ly-drone-bright" min="0" max="1" step="0.01" value="0.5"></label>
+        </div>
+      </div>
+
+      <!-- Cloud Granular -->
+      <div class="layer" data-layer="cloud">
+        <div class="layer-head">
+          <label class="layer-toggle"><input type="checkbox" id="ly-cloud-on"> <strong>CLOUD</strong> (粒状 Cloud mode)</label>
+          <span class="layer-meter" id="ly-cloud-meter"></span>
+        </div>
+        <div class="layer-params">
+          <label>gain <input type="range" id="ly-cloud-gain" min="0" max="1" step="0.01" value="0.3"></label>
+          <label>grain size (s) <input type="range" id="ly-cloud-gsize" min="0.1" max="1.5" step="0.05" value="0.4"></label>
+          <label>overlap <input type="range" id="ly-cloud-overlap" min="0.01" max="0.5" step="0.01" value="0.1"></label>
+          <label>playback rate <input type="range" id="ly-cloud-rate" min="0.25" max="2" step="0.01" value="1"></label>
+          <label>detune (cents) <input type="range" id="ly-cloud-detune" min="-1200" max="1200" step="10" value="0"></label>
+        </div>
+        <div class="sample-row">
+          <label class="sample-label">sample: <span id="cloud-sample-name">none</span></label>
+          <button class="mini" id="cloud-sample-btn">Load WAV</button>
+          <input type="file" id="cloud-sample-input" accept="audio/*" style="display:none">
+        </div>
+      </div>
+
+      <!-- Classic Granular -->
+      <div class="layer" data-layer="classic">
+        <div class="layer-head">
+          <label class="layer-toggle"><input type="checkbox" id="ly-classic-on"> <strong>CLASSIC</strong> (粒状 Classic mode)</label>
+          <span class="layer-meter" id="ly-classic-meter"></span>
+        </div>
+        <div class="layer-params">
+          <label>gain <input type="range" id="ly-classic-gain" min="0" max="1" step="0.01" value="0.2"></label>
+          <label>grain size (s) <input type="range" id="ly-classic-gsize" min="0.02" max="0.3" step="0.01" value="0.08"></label>
+          <label>overlap <input type="range" id="ly-classic-overlap" min="0.005" max="0.1" step="0.005" value="0.02"></label>
+          <label>playback rate <input type="range" id="ly-classic-rate" min="0.25" max="2" step="0.01" value="1"></label>
+          <label>detune (cents) <input type="range" id="ly-classic-detune" min="-1200" max="1200" step="10" value="0"></label>
+        </div>
+        <div class="sample-row">
+          <label class="sample-label">sample: <span id="classic-sample-name">none</span></label>
+          <button class="mini" id="classic-sample-btn">Load WAV</button>
+          <input type="file" id="classic-sample-input" accept="audio/*" style="display:none">
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== MASTER ==================== -->
+    <h3 class="section-title" style="margin-top:20px">🎚️ MASTER <span class="section-hint">全体の音量 / 空間演出</span></h3>
+    <div class="layers">
+      <div class="layer master" data-layer="master">
+        <div class="layer-params">
+          <label>master gain <input type="range" id="m-gain" min="0" max="1" step="0.01" value="0.7"></label>
+          <label>reverb wet <input type="range" id="m-reverb" min="0" max="1" step="0.01" value="0.4"></label>
+          <label>reverb decay (s) <input type="range" id="m-reverb-decay" min="1" max="15" step="0.5" value="6"></label>
+          <label>filter freq (Hz) <input type="range" id="m-filter" min="200" max="10000" step="50" value="6000"></label>
+          <label>filter type
+            <select id="m-filter-type">
+              <option value="lowpass">lowpass</option>
+              <option value="highpass">highpass</option>
+              <option value="bandpass">bandpass</option>
+            </select>
+          </label>
+          <label>comp threshold (dB) <input type="range" id="m-comp-thresh" min="-40" max="0" step="0.5" value="-18"></label>
+          <label>comp ratio <input type="range" id="m-comp-ratio" min="1" max="20" step="0.1" value="4"></label>
+          <label>limiter thresh (dB) <input type="range" id="m-lim-thresh" min="-12" max="0" step="0.1" value="-1"></label>
+          <label style="grid-column: 1 / -1">gain reduction <span id="m-gr-meter" style="font-family:monospace;color:#d4a574">—</span></label>
+        </div>
+      </div>
+      <div class="layer master" data-layer="master-fx">
+        <div class="layer-params">
+          <label style="grid-column: 1 / -1;opacity:0.7;font-size:0.85em">— FX chain (delay → chorus → phaser, pre-reverb) —</label>
+          <label>delay wet <input type="range" id="m-delay-wet" min="0" max="1" step="0.01" value="0"></label>
+          <label>delay time (s) <input type="range" id="m-delay-time" min="0.02" max="1.5" step="0.01" value="0.3"></label>
+          <label>delay feedback <input type="range" id="m-delay-fb" min="0" max="0.9" step="0.01" value="0.4"></label>
+          <label>chorus wet <input type="range" id="m-chorus-wet" min="0" max="1" step="0.01" value="0"></label>
+          <label>chorus rate (Hz) <input type="range" id="m-chorus-rate" min="0.1" max="8" step="0.05" value="1.5"></label>
+          <label>chorus depth <input type="range" id="m-chorus-depth" min="0" max="1" step="0.01" value="0.5"></label>
+          <label>phaser wet <input type="range" id="m-phaser-wet" min="0" max="1" step="0.01" value="0"></label>
+          <label>phaser rate (Hz) <input type="range" id="m-phaser-rate" min="0.05" max="4" step="0.05" value="0.5"></label>
+          <label>phaser Q <input type="range" id="m-phaser-q" min="0.5" max="20" step="0.1" value="8"></label>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== MODULATION (LFO) ==================== -->
+    <h3 class="section-title" style="margin-top:20px">🌀 MODULATION <span class="section-hint">LFOによるパラメータ揺らぎ</span></h3>
+    <div id="lfoList" class="lfo-list"></div>
+  </div>
+</main>
+
+<script>
+// ========================================================================
+// Step 1: 画像読み込み + 特徴量抽出
+// ========================================================================
+
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const dropLabel = document.getElementById('dropLabel');
+const statusLine = document.getElementById('statusLine');
+
+// ドラッグ&ドロップ
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  dropZone.classList.add('active');
+});
+dropZone.addEventListener('dragleave', () => {
+  dropZone.classList.remove('active');
+});
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone.classList.remove('active');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) {
+    loadImageFile(file);
+  }
+});
+fileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (file) loadImageFile(file);
+});
+
+function loadImageFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      // Dropzone を画像プレビューに置き換え
+      dropZone.classList.add('has-image');
+      dropZone.innerHTML = '';
+      dropZone.appendChild(img);
+      dropZone.appendChild(fileInput);
+      // 特徴量抽出
+      const features = extractFeatures(img);
+      showFeatures(features);
+      showMapping(features);
+      // グローバルに保存（Step 2 で使う）
+      window.currentFeatures = features;
+      statusLine.textContent = `image loaded: ${img.naturalWidth}×${img.naturalHeight}`;
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ------------------------------------------------------------------------
+// 特徴量抽出は features.js に分離（window.extractFeatures / rgbToHsv を公開）
+// ------------------------------------------------------------------------
+function clamp01(x) { return Math.max(0, Math.min(1, x)); }
+
+// ------------------------------------------------------------------------
+// 特徴量の可視化
+// ------------------------------------------------------------------------
+function showFeatures(f) {
+  setFeature('brightness', f.brightness);
+  setFeature('saturation', f.saturation);
+  setFeature('edge', f.edge_density);
+  setFeature('hue-mean', f.hue_mean);
+  setFeature('hue-var', f.hue_variance);
+
+  // 3x3 grids
+  renderBlockGrid('grid-brightness', f.block_brightness, (v) => `rgb(${Math.round(v*255)},${Math.round(v*255)},${Math.round(v*255)})`);
+  renderBlockGrid('grid-edge', f.block_edge_density, (v) => {
+    const g = Math.round(v * 255);
+    return `rgb(${g},${Math.round(g*0.7)},${Math.round(g*0.3)})`;
+  });
+
+  // 詳細ダンプ + diff
+  const prev = window._prevFeatures || null;
+  renderFeatureDump(f, prev);
+  renderFeatureDiff(f, prev);
+
+  window._prevFeatures = f;
+}
+
+function renderBlockGrid(elId, arr, colorFn) {
+  const host = document.getElementById(elId);
+  if (!host) return;
+  host.innerHTML = '';
+  if (!arr || arr.length !== 9) {
+    for (let i = 0; i < 9; i++) host.appendChild(document.createElement('div'));
+    return;
+  }
+  for (let i = 0; i < 9; i++) {
+    const cell = document.createElement('div');
+    cell.style.background = colorFn(arr[i]);
+    const lbl = document.createElement('span');
+    lbl.textContent = arr[i].toFixed(2);
+    cell.appendChild(lbl);
+    host.appendChild(cell);
+  }
+}
+
+function renderFeatureDump(f, prev) {
+  const host = document.getElementById('feature-dump');
+  if (!host) return;
+  // 展開可能な特徴量を順次並べる
+  const rows = [];
+  const pushScalar = (k, v) => rows.push([k, v]);
+  const pushArray = (k, arr) => {
+    if (!arr) return;
+    arr.forEach((v, i) => rows.push([`${k}[${i}]`, v]));
+  };
+  pushScalar('brightness', f.brightness);
+  pushScalar('saturation', f.saturation);
+  pushScalar('edge_density', f.edge_density);
+  pushScalar('hue_mean', f.hue_mean);
+  pushScalar('hue_variance', f.hue_variance);
+  pushScalar('hue_concentration', f.hue_concentration);
+  pushScalar('hue_entropy', f.hue_entropy);
+  pushScalar('brightness_variance', f.brightness_variance);
+  pushScalar('saturation_variance', f.saturation_variance);
+  pushScalar('brightness_skewness', f.brightness_skewness);
+  pushScalar('local_contrast', f.local_contrast);
+  pushScalar('sat_bright_corr', f.saturation_brightness_correlation);
+  pushScalar('v_diff', f.brightness_vertical_diff);
+  pushScalar('h_diff', f.brightness_horizontal_diff);
+  pushScalar('d_diff', f.brightness_diagonal_diff);
+  pushArray('block_bright', f.block_brightness);
+  pushArray('block_edge', f.block_edge_density);
+  pushArray('edge_dir', f.edge_direction);
+  pushArray('hue_hist', f.hue_histogram);
+
+  host.innerHTML = rows.map(([k, v]) => {
+    if (typeof v !== 'number' || !isFinite(v)) return `<dt>${k}</dt><dd>—</dd>`;
+    let changed = false;
+    if (prev) {
+      const pv = resolveFeaturePath(prev, k);
+      if (pv !== null && Math.abs(pv - v) > 0.02) changed = true;
+    }
+    return `<dt>${k}</dt><dd${changed ? ' class="diff-changed"' : ''}>${v.toFixed(3)}</dd>`;
+  }).join('');
+}
+
+function resolveFeaturePath(f, key) {
+  // トップキーまたは arr[idx] 形式
+  const m = key.match(/^(.+?)\[(\d+)\]$/);
+  if (m) {
+    const arr = f[m[1]];
+    if (Array.isArray(arr)) return arr[parseInt(m[2], 10)];
+    return null;
+  }
+  const v = f[key];
+  return (typeof v === 'number') ? v : null;
+}
+
+function renderFeatureDiff(f, prev) {
+  const host = document.getElementById('diff-summary');
+  if (!host) return;
+  if (!prev) { host.textContent = '(初回)'; return; }
+  // 全スカラー特徴量を比べて平均変化量を算出
+  const keys = ['brightness','saturation','edge_density','hue_mean','hue_variance','hue_entropy','hue_concentration','brightness_variance','saturation_variance','brightness_skewness','local_contrast','saturation_brightness_correlation','brightness_vertical_diff','brightness_horizontal_diff','brightness_diagonal_diff'];
+  let sum = 0, n = 0, maxKey = '', maxDiff = 0;
+  for (const k of keys) {
+    const a = f[k], b = prev[k];
+    if (typeof a === 'number' && typeof b === 'number') {
+      const d = Math.abs(a - b);
+      sum += d; n++;
+      if (d > maxDiff) { maxDiff = d; maxKey = k; }
+    }
+  }
+  // 配列特徴も利いたほがいい
+  for (const akey of ['block_brightness','block_edge_density','edge_direction','hue_histogram']) {
+    const a = f[akey], b = prev[akey];
+    if (Array.isArray(a) && Array.isArray(b) && a.length === b.length) {
+      for (let i = 0; i < a.length; i++) {
+        const d = Math.abs(a[i] - b[i]);
+        sum += d; n++;
+        if (d > maxDiff) { maxDiff = d; maxKey = `${akey}[${i}]`; }
+      }
+    }
+  }
+  const mean = n > 0 ? sum / n : 0;
+  host.innerHTML = `mean <strong>${mean.toFixed(3)}</strong> / max <strong>${maxDiff.toFixed(3)}</strong> (${maxKey})`;
+}
+
+function setFeature(key, value) {
+  document.getElementById(`val-${key}`).textContent = value.toFixed(3);
+  document.getElementById(`bar-${key}`).style.width = (value * 100) + '%';
+}
+
+// ------------------------------------------------------------------------
+// 音楽パラメータへのマッピング表示 (Step 2 で音として鳴らす)
+// ------------------------------------------------------------------------
+function showMapping(f) {
+  const view = document.getElementById('mappingView');
+  // キー (色相 → C〜B の 12 半音)
+  const keyNames = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  const keyIdx = Math.floor(f.hue_mean * 12) % 12;
+  const keyName = keyNames[keyIdx];
+
+  // スケール (色相分散で決定: 低=メジャー, 高=マイナー)
+  const scale = f.hue_variance < 0.3 ? 'major' :
+                f.hue_variance < 0.6 ? 'pentatonic' : 'minor';
+
+  // 音域中心 (輝度で決定: 低輝度=低音, 高輝度=高音、MIDI 48〜84)
+  const centerMidi = Math.round(48 + f.brightness * 36);
+
+  // テンポ・密度 (edge_density 連動)
+  const density = (2 + f.edge_density * 10).toFixed(1);
+
+  // フィルタタイプ (色相)
+  const filterType = (f.hue_mean < 0.17 || f.hue_mean > 0.83) ? 'lowpass (暖色)' :
+                     (f.hue_mean > 0.33 && f.hue_mean < 0.67) ? 'highpass (寒色)' :
+                     'bandpass (中間)';
+
+  // リバーブ量 (saturation で決定)
+  const reverbAmt = (0.2 + f.saturation * 0.5).toFixed(2);
+
+  view.innerHTML = `
+    <strong>画像特徴量 → 音楽パラメータ マッピング</strong><br>
+    <code>key</code>: ${keyName} (hue_mean ${f.hue_mean.toFixed(2)} → idx ${keyIdx})<br>
+    <code>scale</code>: ${scale} (hue_variance ${f.hue_variance.toFixed(2)})<br>
+    <code>center</code>: MIDI ${centerMidi} (brightness ${f.brightness.toFixed(2)})<br>
+    <code>density</code>: ${density} notes/s (edge ${f.edge_density.toFixed(2)})<br>
+    <code>filter</code>: ${filterType}<br>
+    <code>reverb</code>: ${reverbAmt} wet (saturation ${f.saturation.toFixed(2)})
+  `;
+}
+
+// ========================================================================
+// Step 2: サウンドエンジン (Tone.js 4層構成)
+// ========================================================================
+
+const engine = {
+  started: false,
+  scheduled: [],        // setInterval / Tone.Loop ids
+  master: null,         // Tone.Gain
+  reverb: null,         // Tone.Reverb
+  filter: null,         // Tone.Filter
+  compressor: null,     // Tone.Compressor
+  limiter: null,        // Tone.Limiter
+  delay: null,          // Tone.FeedbackDelay (pre-reverb FX)
+  chorus: null,         // Tone.Chorus (pre-reverb FX)
+  phaser: null,         // Tone.Phaser (pre-reverb FX)
+  drone: null,          // PolySynth
+  // melody layer removed; Generators handle melody (see generators.js / melody.js)
+  cloud: null,          // GrainPlayer
+  classic: null,        // GrainPlayer
+  layerGains: {},       // per-layer gain nodes
+  musical: {
+    keyMidi: 60, scale: [0, 2, 4, 5, 7, 9, 11], centerMidi: 60,
+  },
+};
+
+const SCALES = {
+  // 主要 2 scale (deriveMusical が使用)
+  major:      [0, 2, 4, 5, 7, 9, 11],
+  minor:      [0, 2, 3, 5, 7, 8, 10],
+  pentatonic: [0, 2, 4, 7, 9],
+  // 7 modes (modal interchange 用)
+  ionian:     [0, 2, 4, 5, 7, 9, 11],   // = major
+  dorian:     [0, 2, 3, 5, 7, 9, 10],
+  phrygian:   [0, 1, 3, 5, 7, 8, 10],
+  lydian:     [0, 2, 4, 6, 7, 9, 11],
+  mixolydian: [0, 2, 4, 5, 7, 9, 10],
+  aeolian:    [0, 2, 3, 5, 7, 8, 10],   // = minor
+  locrian:    [0, 1, 3, 5, 6, 8, 10],
+};
+
+// modal interchange の環式順序 (brightness: 左→右 で明るい → 暗い の転がり)
+// lydian (最明) → ionian → mixolydian → dorian → aeolian → phrygian → locrian (最暗)
+const MODE_RING = ['lydian', 'ionian', 'mixolydian', 'dorian', 'aeolian', 'phrygian', 'locrian'];
+
+// major / minor / pentatonic を mode ring 上のインデックスに正規化
+function scaleNameToModeIndex(scaleName) {
+  if (scaleName === 'major') return MODE_RING.indexOf('ionian');
+  if (scaleName === 'minor') return MODE_RING.indexOf('aeolian');
+  if (scaleName === 'pentatonic') return MODE_RING.indexOf('ionian'); // major 系と見なす
+  const i = MODE_RING.indexOf(scaleName);
+  return i < 0 ? MODE_RING.indexOf('ionian') : i;
+}
+
+// ---------- musical state derived from image ----------
+// 42特徴量から音楽的状態を導出する。
+// - key: hue_mean (主要)
+// - scale: hue_entropy + brightness_skewness で明暗を微調
+// - centerMidi: brightness + block_brightnessの上下差で歌域中心を変える
+// - progression: brightness_vertical_diff から 7種選択
+// - tempoJitter: edge_density + local_contrast
+// - jumpRange: block_brightness分散 + edge分散
+const PROGRESSION_KEYS = ['I-V-vi-IV', 'I-vi-IV-V', 'vi-IV-I-V', 'I-IV-V-I', 'ii-V-I', 'I-V-I', 'I-vi-ii-V'];
+
+function variance(arr) {
+  if (!arr || arr.length === 0) return 0;
+  const m = arr.reduce((a, b) => a + b, 0) / arr.length;
+  let s = 0;
+  for (const v of arr) s += (v - m) ** 2;
+  return s / arr.length;
+}
+
+function deriveMusical(f) {
+  const keyMidi = Math.floor(f.hue_mean * 12) % 12;
+
+  // scale: 明暗 = skewness (明るいに寄ると major) + entropy (下がると pentatonic / 上がると minor)
+  const majorBias = (f.brightness_skewness - 0.5) * 2 + (f.brightness - 0.5); // -2..2
+  const entropy = (f.hue_entropy !== undefined) ? f.hue_entropy : (1 - (f.hue_variance || 0));
+  let scaleName;
+  if (majorBias > 0.3 && entropy < 0.6) scaleName = 'major';
+  else if (majorBias < -0.3) scaleName = 'minor';
+  else if (entropy < 0.4) scaleName = 'pentatonic';
+  else scaleName = (f.hue_variance < 0.5) ? 'major' : 'minor';
+  const scale = SCALES[scaleName];
+
+  // center: brightness + 上下差でシフト
+  const vdiff = (f.brightness_vertical_diff !== undefined) ? (f.brightness_vertical_diff - 0.5) * 2 : 0; // -1..1
+  const centerMidi = Math.round(48 + f.brightness * 36 + vdiff * 6); // 上明るいと高ほに寄る
+
+  // progression index: brightness_vertical_diff から
+  const progIdx = Math.min(PROGRESSION_KEYS.length - 1, Math.floor((f.brightness_vertical_diff || 0.5) * PROGRESSION_KEYS.length));
+  const progression = PROGRESSION_KEYS[progIdx];
+
+  // パラメータ群 (ジェネレータへのヒント)
+  const blockBrightness = f.block_brightness || [];
+  const blockEdge = f.block_edge_density || [];
+  const blockBrightnessVar = variance(blockBrightness);
+  const blockEdgeVar = variance(blockEdge);
+
+  return {
+    keyMidi, scaleName, scale, centerMidi,
+    progression,
+    tempoHint: 0.4 + (f.edge_density || 0) * 0.6 + (f.local_contrast || 0) * 0.4,
+    jumpRangeHint: 3 + blockBrightnessVar * 20,
+    phraseDensityHint: 0.3 + blockEdgeVar * 3,
+    chordStabilityHint: f.hue_concentration || 0.5,
+    bassSolidityHint: 1 - (f.brightness_variance || 0),
+  };
+}
+
+function noteFromScale(m, octaveShift = 0, rand = Math.random) {
+  // m = { keyMidi, scale, centerMidi }
+  const deg = m.scale[Math.floor(rand() * m.scale.length)];
+  const octRoot = Math.floor(m.centerMidi / 12) * 12;
+  return octRoot + m.keyMidi + deg + octaveShift * 12;
+}
+
+function midiToFreq(n) { return 440 * Math.pow(2, (n - 69) / 12); }
+
+// ---------- engine build ----------
+async function startEngine() {
+  if (engine.started) return;
+  await Tone.start();
+  statusLine.textContent = 'audio: running';
+
+  // master chain: layerGains -> filter -> delay -> chorus -> phaser -> reverb -> compressor -> limiter -> master -> destination
+  engine.master = new Tone.Gain(getVal('m-gain')).toDestination();
+  // Limiter: 最終段でクリップ防止 (threshold -1dB)
+  engine.limiter = new Tone.Limiter(-1);
+  engine.limiter.connect(engine.master);
+  // Compressor: 音楽的 glue (threshold -18dB, ratio 4, attack 10ms, release 100ms, knee 12dB)
+  engine.compressor = new Tone.Compressor({
+    threshold: -18,
+    ratio: 4,
+    attack: 0.01,
+    release: 0.1,
+    knee: 12,
+  });
+  engine.compressor.connect(engine.limiter);
+  engine.reverb = new Tone.Reverb({ decay: getVal('m-reverb-decay'), wet: getVal('m-reverb') });
+  await engine.reverb.generate();
+  // FX chain (pre-reverb): delay -> chorus -> phaser
+  engine.phaser = new Tone.Phaser({
+    frequency: getVal('m-phaser-rate'),
+    octaves: 3,
+    baseFrequency: 350,
+    Q: getVal('m-phaser-q'),
+    wet: getVal('m-phaser-wet'),
+  });
+  engine.phaser.connect(engine.reverb);
+  engine.chorus = new Tone.Chorus({
+    frequency: getVal('m-chorus-rate'),
+    delayTime: 3.5,
+    depth: getVal('m-chorus-depth'),
+    wet: getVal('m-chorus-wet'),
+  }).start();
+  engine.chorus.connect(engine.phaser);
+  engine.delay = new Tone.FeedbackDelay({
+    delayTime: getVal('m-delay-time'),
+    feedback: getVal('m-delay-fb'),
+    wet: getVal('m-delay-wet'),
+  });
+  engine.delay.connect(engine.chorus);
+  engine.filter = new Tone.Filter({
+    type: document.getElementById('m-filter-type').value,
+    frequency: getVal('m-filter'),
+    Q: 0.7,
+  });
+  engine.filter.connect(engine.delay);
+  engine.reverb.connect(engine.compressor);
+
+  // per-layer gain nodes
+  for (const key of ['drone', 'cloud', 'classic']) {
+    const g = new Tone.Gain(getVal(`ly-${shortKey(key)}-gain`));
+    g.connect(engine.filter);
+    engine.layerGains[key] = g;
+  }
+
+  // Layer 1: DRONE (PolySynth, long ADSR, pure sine-ish with harmonics)
+  engine.drone = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'sine' },
+    envelope: { attack: 2.5, decay: 0.5, sustain: 0.8, release: 4.0 },
+    volume: -6,
+  });
+  engine.drone.maxPolyphony = 16;
+  engine.drone.connect(engine.layerGains.drone);
+
+  // Layer 3 & 4: Granular players created on sample load (or with default synthetic sample)
+  await ensureDefaultSample('cloud');
+  await ensureDefaultSample('classic');
+
+  // scheduling (Eno-style: different length loops per layer, not synced)
+  scheduleDrone();
+  scheduleGranular('cloud');
+  scheduleGranular('classic');
+
+  // UI
+  document.querySelectorAll('.layer').forEach(el => {
+    const key = el.dataset.layer;
+    if (key === 'master') { el.classList.add('active'); return; }
+    const cb = document.getElementById(`ly-${shortKey(key)}-on`);
+    el.classList.toggle('active', cb && cb.checked);
+  });
+
+  engine.started = true;
+  engineStatus.textContent = 'engine running. adjust layers freely. Stop to halt.';
+  if (typeof scopeAttach === 'function') scopeAttach();
+  if (typeof generatorsOnEngineStart === 'function') generatorsOnEngineStart();
+}
+
+function stopEngine() {
+  if (!engine.started) return;
+  if (typeof scopeDetach === 'function') scopeDetach();
+  if (typeof generatorsOnEngineStop === 'function') generatorsOnEngineStop();
+  for (const id of engine.scheduled) clearInterval(id);
+  engine.scheduled = [];
+  if (engine.drone) engine.drone.releaseAll();
+  if (engine.cloud && engine.cloud.state === 'started') engine.cloud.stop();
+  if (engine.classic && engine.classic.state === 'started') engine.classic.stop();
+  // dispose
+  const nodes = [
+    engine.drone, engine.cloud, engine.classic,
+    engine.layerGains.drone,
+    engine.layerGains.cloud, engine.layerGains.classic,
+    engine.filter,
+    engine.delay, engine.chorus, engine.phaser,
+    engine.reverb,
+    engine.compressor, engine.limiter,
+    engine.master,
+  ];
+  for (const n of nodes) { try { if (n && n.dispose) n.dispose(); } catch(e) {} }
+  engine.started = false;
+  engine.layerGains = {};
+  statusLine.textContent = 'audio: stopped';
+  engineStatus.textContent = 'stopped. press Start to run again.';
+  document.querySelectorAll('.layer').forEach(el => el.classList.remove('active'));
+}
+
+function panic() {
+  for (const k of ['drone','cloud','classic']) {
+    const cb = document.getElementById(`ly-${shortKey(k)}-on`);
+    if (cb) cb.checked = false;
+  }
+  applyLayerToggles();
+  if (engine.drone) engine.drone.releaseAll();
+}
+
+function shortKey(k) {
+  return k;
+}
+function getVal(id) {
+  const el = document.getElementById(id);
+  if (!el) return 0;
+  return parseFloat(el.value);
+}
+
+// ---------- default sample (synthetic pink noise, 3s) ----------
+async function ensureDefaultSample(layerKey) {
+  if (engine[layerKey]) return;
+  const buf = synthesizePinkNoise(3, Tone.context.sampleRate);
+  await buildGrainPlayer(layerKey, buf);
+  document.getElementById(`${layerKey}-sample-name`).textContent = '(default pink noise)';
+}
+
+function synthesizePinkNoise(durSec, sr) {
+  const n = Math.floor(durSec * sr);
+  const data = new Float32Array(n);
+  let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0;
+  for (let i = 0; i < n; i++) {
+    const white = Math.random() * 2 - 1;
+    b0 = 0.99886 * b0 + white * 0.0555179;
+    b1 = 0.99332 * b1 + white * 0.0750759;
+    b2 = 0.96900 * b2 + white * 0.1538520;
+    b3 = 0.86650 * b3 + white * 0.3104856;
+    b4 = 0.55000 * b4 + white * 0.5329522;
+    b5 = -0.7616 * b5 - white * 0.0168980;
+    const pink = (b0+b1+b2+b3+b4+b5+b6+white*0.5362) * 0.11;
+    b6 = white * 0.115926;
+    data[i] = pink * 0.5;
+  }
+  const buf = Tone.context.createBuffer(1, n, sr);
+  buf.copyToChannel(data, 0);
+  return buf;
+}
+
+async function buildGrainPlayer(layerKey, audioBuffer) {
+  if (engine[layerKey] && engine[layerKey].dispose) engine[layerKey].dispose();
+  const tbuf = new Tone.ToneAudioBuffer();
+  tbuf.set(audioBuffer);
+  const gp = new Tone.GrainPlayer({
+    url: tbuf,
+    grainSize: getVal(`ly-${layerKey}-gsize`),
+    overlap: getVal(`ly-${layerKey}-overlap`),
+    playbackRate: getVal(`ly-${layerKey}-rate`),
+    detune: getVal(`ly-${layerKey}-detune`),
+    loop: true,
+    volume: -8,
+  });
+  gp.connect(engine.layerGains[layerKey]);
+  engine[layerKey] = gp;
+  const onCb = document.getElementById(`ly-${layerKey}-on`);
+  if (onCb && onCb.checked) gp.start();
+}
+
+async function loadSampleFile(layerKey, file) {
+  const arrayBuf = await file.arrayBuffer();
+  const decoded = await Tone.context.decodeAudioData(arrayBuf.slice(0));
+  await buildGrainPlayer(layerKey, decoded);
+  document.getElementById(`${layerKey}-sample-name`).textContent =
+    `${file.name} (${decoded.duration.toFixed(1)}s)`;
+}
+
+// ---------- scheduling loops (Eno-style: each layer independently timed) ----------
+function scheduleDrone() {
+  // every (1 / density) seconds, trigger one note with a long hold
+  const tick = () => {
+    if (!engine.started) return;
+    const cb = document.getElementById('ly-drone-on');
+    if (!cb.checked) return;
+    const m = engine.musical;
+    const midi = noteFromScale(m, -1);  // low octave
+    const freq = midiToFreq(midi);
+    const hold = getVal('ly-drone-voice');
+    try {
+      engine.drone.triggerAttackRelease(freq, hold, undefined, 0.4 + Math.random() * 0.2);
+    } catch(e) {}
+  };
+  const id = setInterval(() => {
+    const density = getVal('ly-drone-density');
+    if (Math.random() < density / 4) tick();  // stochastic
+  }, 250);
+  engine.scheduled.push(id);
+}
+
+function scheduleMelody() {
+  // DEPRECATED: removed in UI redesign (L2 MELODY replaced by Generators)
+  // kept as no-op for backward safety; actual melody generation now lives in melody.js
+}
+
+function scheduleGranular(layerKey) {
+  // grain player handles its own looping; we just toggle start/stop based on checkbox
+  const id = setInterval(() => {
+    if (!engine.started) return;
+    const gp = engine[layerKey];
+    if (!gp) return;
+    const cb = document.getElementById(`ly-${layerKey}-on`);
+    const want = cb && cb.checked;
+    const isOn = gp.state === 'started';
+    try {
+      if (want && !isOn) gp.start();
+      if (!want && isOn) gp.stop();
+    } catch(e) {}
+  }, 300);
+  engine.scheduled.push(id);
+}
+
+// ---------- live parameter update ----------
+function wireLiveParams() {
+  // master
+  bindSlider('m-gain', v => engine.master && (engine.master.gain.value = v));
+  bindSlider('m-reverb', v => engine.reverb && (engine.reverb.wet.value = v));
+  bindSlider('m-reverb-decay', async v => {
+    if (!engine.reverb) return;
+    engine.reverb.decay = v;
+    // Apply 中は regenerate を抑止 (Apply 末尾で 1 回だけ regenerate する)
+    if (window.__suppressReverbRegen) return;
+    try { await engine.reverb.generate(); } catch(e) {}
+  });
+  bindSlider('m-filter', v => engine.filter && (engine.filter.frequency.value = v));
+  document.getElementById('m-filter-type').addEventListener('change', e => {
+    if (engine.filter) engine.filter.type = e.target.value;
+  });
+  bindSlider('m-comp-thresh', v => engine.compressor && (engine.compressor.threshold.value = v));
+  bindSlider('m-comp-ratio',  v => engine.compressor && (engine.compressor.ratio.value = v));
+  bindSlider('m-lim-thresh',  v => engine.limiter && (engine.limiter.threshold.value = v));
+
+  // FX chain bindings
+  bindSlider('m-delay-wet',    v => engine.delay  && (engine.delay.wet.value = v));
+  bindSlider('m-delay-time',   v => engine.delay  && (engine.delay.delayTime.value = v));
+  bindSlider('m-delay-fb',     v => engine.delay  && (engine.delay.feedback.value = v));
+  bindSlider('m-chorus-wet',   v => engine.chorus && (engine.chorus.wet.value = v));
+  bindSlider('m-chorus-rate',  v => engine.chorus && (engine.chorus.frequency.value = v));
+  bindSlider('m-chorus-depth', v => engine.chorus && (engine.chorus.depth = v));
+  bindSlider('m-phaser-wet',   v => engine.phaser && (engine.phaser.wet.value = v));
+  bindSlider('m-phaser-rate',  v => engine.phaser && (engine.phaser.frequency.value = v));
+  bindSlider('m-phaser-q',     v => engine.phaser && (engine.phaser.Q.value = v));
+
+  // Gain reduction meter (compressor の reduction を 50ms ごとに表示)
+  setInterval(() => {
+    const el = document.getElementById('m-gr-meter');
+    if (!el) return;
+    if (!engine.compressor) { el.textContent = '—'; return; }
+    const r = engine.compressor.reduction; // negative dB
+    if (typeof r === 'number' && isFinite(r)) {
+      const bar = '█'.repeat(Math.max(0, Math.min(20, Math.round(-r))));
+      el.textContent = `${r.toFixed(1)} dB  ${bar}`;
+    }
+  }, 80);
+
+  // per-layer gain
+  for (const k of ['drone','cloud','classic']) {
+    bindSlider(`ly-${k}-gain`, v => {
+      const target = engine.layerGains[k];
+      if (target) target.gain.value = v;
+    });
+  }
+
+  // granular params
+  for (const k of ['cloud','classic']) {
+    bindSlider(`ly-${k}-gsize`, v => { if (engine[k]) engine[k].grainSize = v; });
+    bindSlider(`ly-${k}-overlap`, v => { if (engine[k]) engine[k].overlap = v; });
+    bindSlider(`ly-${k}-rate`, v => { if (engine[k]) engine[k].playbackRate = v; });
+    bindSlider(`ly-${k}-detune`, v => { if (engine[k]) engine[k].detune = v; });
+  }
+
+  // layer toggles
+  for (const k of ['drone','cloud','classic']) {
+    document.getElementById(`ly-${k}-on`).addEventListener('change', applyLayerToggles);
+  }
+}
+
+function bindSlider(id, fn) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('input', () => fn(parseFloat(el.value)));
+}
+
+function applyLayerToggles() {
+  document.querySelectorAll('.layer').forEach(el => {
+    const key = el.dataset.layer;
+    if (key === 'master') return;
+    const cb = document.getElementById(`ly-${shortKey(key)}-on`);
+    el.classList.toggle('active', cb && cb.checked && engine.started);
+  });
+}
+
+// ---------- image mapping -> parameter application ----------
+// salt (一回性): スカラー特徴量に微細なジッターを加えて、
+// 同じ画像でも Apply ごとに少し違う音になるようにする。
+// キー特徴から衍生する hue_mean / saturation / brightness / edge_density は
+// jitter を小さく (±1.5%) 、その他は大きめ (±3%) にしてキャラクターを壊さない。
+function saltFeatures(src) {
+  const out = Object.assign({}, src);
+  const small = () => (Math.random() - 0.5) * 0.03;   // ±1.5%
+  const medium = () => (Math.random() - 0.5) * 0.06;  // ±3%
+  const clamp01 = (x) => Math.max(0, Math.min(1, x));
+  const saltScalar01 = (k, mag) => {
+    if (typeof out[k] === 'number') out[k] = clamp01(out[k] + mag());
+  };
+  // キー特徴 (小さめ)
+  ['hue_mean','saturation','brightness','edge_density'].forEach(k => saltScalar01(k, small));
+  // 2 次特徴 (大きめ)
+  ['hue_variance','hue_entropy','hue_concentration',
+   'brightness_variance','saturation_variance','brightness_skewness',
+   'local_contrast','saturation_brightness_correlation',
+   'brightness_vertical_diff','brightness_horizontal_diff','brightness_diagonal_diff'
+  ].forEach(k => saltScalar01(k, medium));
+  return out;
+}
+
+let applyInProgress = false;
+async function applyImageMapping() {
+  if (applyInProgress) return;  // 連打ガード: 進行中の Apply と競合させない
+  applyInProgress = true;
+  const btn = document.getElementById('btnApplyMapping');
+  if (btn) btn.disabled = true;
+  try {
+    await applyImageMappingCore();
+  } finally {
+    applyInProgress = false;
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function applyImageMappingCore() {
+  const fRaw = window.currentFeatures;
+  if (!fRaw) {
+    alert('先に画像を読み込んでください');
+    return;
+  }
+  const jitterOn = document.getElementById('mapping-jitter')?.checked;
+  const f = jitterOn ? saltFeatures(fRaw) : fRaw;
+  const m = deriveMusical(f);
+  engine.musical = m;
+
+  // Apply 中の m-reverb-decay input 発火で reverb.generate() が競合しないよう抑止
+  window.__suppressReverbRegen = true;
+
+  const bv = f.brightness_variance || 0;
+  const sv = f.saturation_variance || 0;
+  const lc = f.local_contrast || 0;
+  const sbc = f.saturation_brightness_correlation || 0.5; // 0-1
+  const hent = f.hue_entropy || 0;
+  const ed = f.edge_direction || [0.25, 0.25, 0.25, 0.25];
+  const hc = f.hue_concentration || 0;
+  const vdiffCentered = ((f.brightness_vertical_diff || 0.5) - 0.5) * 2; // -1..1
+  const hdiffAbs = Math.abs(((f.brightness_horizontal_diff || 0.5) - 0.5) * 2);
+
+  // DRONE: brightness + saturation_variance で厸性 / bright は brightness_mean
+  setSlider('ly-drone-voice', 3 + f.brightness * 5 + sv * 4);   // 3-12s
+  setSlider('ly-drone-density', Math.max(0.4, 0.3 + f.saturation * 0.7 + bv * 0.4));
+  setSlider('ly-drone-bright', 0.15 + f.brightness * 0.85);  // 暗画像でも最低 0.15 確保
+
+  // DRONE oscillator type ← brightness_skewness + local_contrast で4択
+  //   暗い(skew低)  → sine  (柔らかい)
+  //   中間         → triangle (やや倍音)
+  //   明るい(skew高)→ sawtooth (明るく厚い)
+  //   高コントラスト→ square  (ピーキー)
+  const skew = f.brightness_skewness !== undefined ? f.brightness_skewness : 0.5;
+  let droneOsc = 'sine';
+  if (lc > 0.6 && f.edge_density > 0.3) droneOsc = 'square';
+  else if (skew < 0.35) droneOsc = 'sine';
+  else if (skew < 0.6) droneOsc = 'triangle';
+  else droneOsc = 'sawtooth';
+  // drone の oscillator / envelope 変更は、発音中 voice があるとクリック音が出るため releaseAll() してから set
+  if (engine.drone) {
+    try { engine.drone.releaseAll(); } catch(e) {}
+    if (engine.drone.set) {
+      try { engine.drone.set({ oscillator: { type: droneOsc } }); } catch(e) { console.warn('drone osc set failed', e); }
+    }
+  }
+  engine.droneOscType = droneOsc;
+
+  // DRONE envelope (ADSR) を画像特徴から導出
+  //   attack   : エッジが少ないほどチャイムに立ち上がる (1 - edge_density)
+  //   decay    : 彩度のばらつきで decay 時間
+  //   sustain  : 彩度高いと sustain 大 (豊かな音は长く持続)
+  //   release  : 明るさで余韻の長さ (暗画像でも最低 2.0s 保証)
+  const droneEnv = {
+    attack: 0.8 + (1 - f.edge_density) * 3.5,                  // 0.8-4.3s
+    decay: 0.3 + sv * 1.8,                                       // 0.3-2.1s
+    sustain: 0.55 + f.saturation * 0.4,                          // 0.55-0.95
+    release: 2.0 + f.brightness * 6.0,                           // 2.0-8.0s
+  };
+  if (engine.drone && engine.drone.set) {
+    try { engine.drone.set({ envelope: droneEnv }); } catch(e) { console.warn('drone env set failed', e); }
+  }
+
+  // CLOUD granular: sat-bright相関 が高い = まとまり → 粒大きめ / edge_direction[vertical] → rate
+  setSlider('ly-cloud-gsize', 0.2 + sbc * 1.0);                 // 0.2-1.2
+  setSlider('ly-cloud-overlap', 0.05 + (1 - sbc) * 0.3);
+  setSlider('ly-cloud-rate', 0.5 + ed[2] * 1.5);                // ed[2]=vertical edges → rate
+  setSlider('ly-cloud-detune', (hent - 0.5) * 1800);            // hue_entropy → detune
+
+  // CLASSIC granular: edge_density + local_contrast
+  setSlider('ly-classic-gsize', 0.03 + f.edge_density * 0.2 + lc * 0.08);
+  setSlider('ly-classic-overlap', 0.01 + lc * 0.08);
+  setSlider('ly-classic-rate', 0.7 + ed[0] * 1.2);              // ed[0]=horizontal edges
+  setSlider('ly-classic-detune', (hent - 0.5) * 2000);
+
+  // MASTER: filter type = hue セクタ / freq = brightness * local_contrast
+  const filterType = (f.hue_mean < 0.17 || f.hue_mean > 0.83) ? 'lowpass' :
+                     (f.hue_mean > 0.33 && f.hue_mean < 0.67) ? 'highpass' :
+                     'bandpass';
+  document.getElementById('m-filter-type').value = filterType;
+  if (engine.filter) engine.filter.type = filterType;
+  setSlider('m-filter', Math.max(800, 600 + f.brightness * 7000 + lc * 2000));  // 暗画像でも mid 帯域を通すフロア
+  setSlider('m-reverb', 0.15 + hdiffAbs * 0.6);                 // 左右差大きいほど残鬿濃い
+  setSlider('m-reverb-decay', 2 + f.saturation * 8 + sv * 4);
+
+  // FX chain (pre-reverb) の画像マップ
+  // 各 wet は 0..0.6 程度に抑えてカオストリックにしない
+  const vdiffAbs = Math.abs(f.brightness_vertical_diff || 0);
+  const bskewAbs = Math.abs(f.brightness_skewness || 0);
+  // Delay: entropy で wet、上下差で time、ローカルコントラストで feedback
+  setSlider('m-delay-wet',  Math.min(0.6, hent * 0.6));
+  setSlider('m-delay-time', 0.08 + vdiffAbs * 0.8);             // 0.08-0.88s
+  setSlider('m-delay-fb',   Math.min(0.75, 0.1 + lc * 0.7));
+  // Chorus: saturation_variance で wet、hue_variance で rate、saturation で depth
+  setSlider('m-chorus-wet',   Math.min(0.5, sv * 1.5));
+  setSlider('m-chorus-rate',  0.2 + (f.hue_variance || 0) * 4);
+  setSlider('m-chorus-depth', 0.2 + f.saturation * 0.6);
+  // Phaser: hue 分散 (1-concentration) で wet、縦エッジで rate、skewness で Q
+  setSlider('m-phaser-wet',  Math.min(0.55, (1 - hc) * 0.55));
+  setSlider('m-phaser-rate', 0.15 + (ed[2] || 0) * 1.6);
+  setSlider('m-phaser-q',    1 + bskewAbs * 10);
+
+  // GENERATORS (lead/harmony/bass) への配線: melody.js が公開した関数を呼ぶ
+  if (typeof window.applyMusicalToGenerators === 'function') {
+    window.applyMusicalToGenerators(m, f);
+  }
+
+  // LFO 再設定: 4本の LFO を画像特徴で全上書き
+  applyImageToLFOs(f);
+
+  // Reverb regenerate 抑止を解除して一回だけ await する (decay が変わった時のみ)
+  window.__suppressReverbRegen = false;
+  if (engine.reverb && typeof engine.reverb.generate === 'function') {
+    try {
+      engine.reverb.decay = getVal('m-reverb-decay');
+      await engine.reverb.generate();
+    } catch(e) { console.warn('reverb regen failed', e); }
+  }
+
+  engineStatus.textContent = `mapping applied. key=${['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'][m.keyMidi]} ${m.scaleName}, center=${m.centerMidi}, prog=${m.progression}, drone=${droneOsc}, gens=${(typeof generators!=='undefined'?generators.length:0)}`;
+}
+
+// ---------- LFO reconfiguration from image ----------
+function applyImageToLFOs(f) {
+  if (typeof lfos === 'undefined' || !Array.isArray(lfos)) return;
+
+  const ed = f.edge_density || 0;
+  const lc = f.local_contrast || 0;
+  const bv = f.brightness_variance || 0;
+  const sv = f.saturation_variance || 0;
+  const hc = f.hue_concentration || 0;
+  const hent = f.hue_entropy || 0;
+  const skew = f.brightness_skewness !== undefined ? f.brightness_skewness : 0.5;
+  const activity = Math.min(1, ed * 1.2 + lc * 0.8);   // 活気度
+
+  // 各 LFO の役割設計:
+  //  LFO1 → 音色揺らぎ (Master filter)
+  //  LFO2 → ドローンの密度揺れ (L1 drone density)
+  //  LFO3 → 残鬿揺らぎ (Master reverb wet)
+  //  LFO4 → 低速な空気感揺れ (L3 cloud detune)
+  const designs = [
+    {
+      id: 1,
+      target: 'm-filter',
+      shape: hc > 0.5 ? 'sine' : 'triangle',
+      rate: 0.1 + ed * 1.4,            // 0.1 - 1.5 Hz
+      depth: Math.min(0.8, 0.15 + f.saturation * 0.6),
+      on: activity > 0.15,
+    },
+    {
+      id: 2,
+      target: 'ly-drone-density',
+      shape: bv > 0.2 ? 'triangle' : 'sine',
+      rate: 0.05 + lc * 0.8,
+      depth: Math.min(0.7, 0.1 + bv * 1.5),
+      on: activity > 0.25,
+    },
+    {
+      id: 3,
+      target: 'm-reverb',
+      shape: hc > 0.6 ? 'sine' : 'smooth-random',
+      rate: 0.08 + (1 - hc) * 0.4,
+      depth: Math.min(0.7, 0.1 + sv * 1.8),
+      on: sv > 0.05,
+    },
+    {
+      id: 4,
+      target: 'ly-cloud-detune',
+      shape: 'smooth-random',
+      rate: 0.04 + hent * 0.25,
+      depth: Math.min(0.8, 0.2 + skew * 0.5),
+      on: hent > 0.3,
+    },
+  ];
+
+  for (const d of designs) {
+    const lfo = lfos.find(x => x.id === d.id);
+    if (!lfo) continue;
+    // 既に ON だったらベースラインを戻してから再設定
+    if (lfo.on && typeof restoreBaseline === 'function') {
+      try { restoreBaseline(lfo); } catch(e) {}
+    }
+    lfo.target = d.target;
+    lfo.shape = d.shape;
+    lfo.rate = d.rate;
+    lfo.depth = d.depth;
+    lfo.on = d.on;
+    // 新 target でベースラインを取り直す
+    if (lfo.on && typeof captureBaseline === 'function') {
+      try { captureBaseline(lfo); } catch(e) {}
+    }
+  }
+
+  // UI 再描画
+  if (typeof buildLFOUI === 'function') {
+    try { buildLFOUI(); } catch(e) { console.warn('buildLFOUI failed', e); }
+  }
+  // active class を更新
+  if (typeof updateLFORowState === 'function') {
+    for (const lfo of lfos) {
+      try { updateLFORowState(lfo); } catch(e) {}
+    }
+  }
+}
+
+function setSlider(id, value) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const min = parseFloat(el.min), max = parseFloat(el.max);
+  el.value = Math.max(min, Math.min(max, value));
+  el.dispatchEvent(new Event('input'));
+}
+
+// ---------- Key / Scale shuffle (roster は保持) ----------
+// engine.musical を直接書き換え、全 generator の chordState をクリアする。
+// 次の tick から新しい key/scale に乗る (移行は即時)。roster / instrument はそのまま。
+const KEY_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+function flashKeyStatus() {
+  const m = engine.musical;
+  if (!m) return;
+  const name = KEY_NAMES[((m.keyMidi % 12) + 12) % 12];
+  engineStatus.textContent = `key=${name} ${m.scaleName}, center=${m.centerMidi}, prog=${m.progression}`;
+}
+
+function resetGeneratorChordState() {
+  // drone の継続音をリリース (旧 key の音が残らないよう)
+  if (engine.drone && engine.drone.releaseAll) {
+    try { engine.drone.releaseAll(); } catch(e) {}
+  }
+  // 全 generator の chordState を null に → 次の tick で ensureChordState が新 key で再初期化
+  const gens = (typeof generators !== 'undefined') ? generators : (window.generators || []);
+  for (const g of gens) {
+    g.chordState = null;
+    if (g.synth && g.synth.releaseAll) {
+      try { g.synth.releaseAll(); } catch(e) {}
+    }
+  }
+}
+
+function shiftTonicBySemitones(semis) {
+  if (!engine.musical) return;
+  const m = engine.musical;
+  m.keyMidi = ((m.keyMidi + semis) % 12 + 12) % 12;
+  resetGeneratorChordState();
+  flashKeyStatus();
+}
+
+function rotateMode(direction) {
+  // direction: +1 = 暗い方へ (mode ▶), -1 = 明るい方へ (◀ mode)
+  if (!engine.musical) return;
+  const m = engine.musical;
+  const curIdx = scaleNameToModeIndex(m.scaleName);
+  const nextIdx = ((curIdx + direction) % MODE_RING.length + MODE_RING.length) % MODE_RING.length;
+  const nextName = MODE_RING[nextIdx];
+  m.scaleName = nextName;
+  m.scale = SCALES[nextName];
+  resetGeneratorChordState();
+  flashKeyStatus();
+}
+
+function warpKey() {
+  if (!engine.musical) return;
+  const m = engine.musical;
+  // 現在の keyMidi 以外の 11 音からランダム
+  let next;
+  do { next = Math.floor(Math.random() * 12); } while (next === m.keyMidi);
+  m.keyMidi = next;
+  resetGeneratorChordState();
+  flashKeyStatus();
+}
+
+// 画像特徴量を強めに jitter して roster だけ再抽選する (key/scale はそのまま)
+// saltFeatures より幅が広い (±15%) ので instrument 選択の閾値越えが起きやすい。
+function rosterJitterFeatures(src) {
+  const out = Object.assign({}, src);
+  const wide = () => (Math.random() - 0.5) * 0.3;   // ±15%
+  const clamp01 = (x) => Math.max(0, Math.min(1, x));
+  const keys = [
+    'edge_density','local_contrast','brightness_variance','saturation_variance',
+    'hue_entropy','brightness_skewness','brightness_vertical_diff',
+    'hue_concentration','saturation','brightness','hue_variance'
+  ];
+  for (const k of keys) {
+    if (typeof out[k] === 'number') out[k] = clamp01(out[k] + wide());
+  }
+  return out;
+}
+
+function shuffleRoster() {
+  if (!engine.musical) {
+    engineStatus.textContent = 'shuffle roster: Apply image mapping を先に実行してください';
+    return;
+  }
+  const fRaw = window.currentFeatures;
+  if (!fRaw) {
+    engineStatus.textContent = 'shuffle roster: 先に画像を読み込んでください';
+    return;
+  }
+  // 画像特徴を強め jitter → roster の決定木 (complexity / skew 等) を越えさせる
+  const fJ = rosterJitterFeatures(fRaw);
+  if (typeof window.applyMusicalToGenerators === 'function') {
+    try {
+      window.applyMusicalToGenerators(engine.musical, fJ);
+    } catch(e) { console.warn('shuffleRoster failed', e); }
+  }
+  const gens = (typeof generators !== 'undefined') ? generators : (window.generators || []);
+  const names = gens.map(g => `${g.method.split('-')[0]}:${g.instrument}`).join(', ');
+  engineStatus.textContent = `roster shuffled: ${gens.length} gens [${names}]`;
+}
+
+// ---------- event wiring ----------
+document.getElementById('btnStart').addEventListener('click', async () => {
+  try { await startEngine(); }
+  catch(e) { console.error(e); engineStatus.textContent = 'error: ' + e.message; }
+});
+document.getElementById('btnStop').addEventListener('click', stopEngine);
+document.getElementById('btnPanic').addEventListener('click', panic);
+document.getElementById('btnApplyMapping').addEventListener('click', applyImageMapping);
+
+// Key / Scale shuffle buttons (roster 保持、移行即時)
+document.getElementById('btnShift5thUp').addEventListener('click', () => shiftTonicBySemitones(7));    // +P5
+document.getElementById('btnShift5thDown').addEventListener('click', () => shiftTonicBySemitones(-7)); // -P5
+document.getElementById('btnModeNext').addEventListener('click', () => rotateMode(+1));  // 暗い方へ
+document.getElementById('btnModePrev').addEventListener('click', () => rotateMode(-1));  // 明るい方へ
+document.getElementById('btnWarpKey').addEventListener('click', warpKey);
+document.getElementById('btnShuffleRoster').addEventListener('click', shuffleRoster);
+
+// sample file loading
+for (const k of ['cloud', 'classic']) {
+  const btn = document.getElementById(`${k}-sample-btn`);
+  const input = document.getElementById(`${k}-sample-input`);
+  btn.addEventListener('click', () => input.click());
+  input.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const nameEl = document.getElementById(`${k}-sample-name`);
+    try {
+      if (!engine.started) {
+        alert('先に Start を押してエンジンを起動してください');
+        return;
+      }
+      nameEl.textContent = `decoding... ${file.name}`;
+      await loadSampleFile(k, file);
+      // 自動で ON にして、かつ簡単な視覚フィードバック
+      const cb = document.getElementById(`ly-${k}-on`);
+      if (cb && !cb.checked) { cb.checked = true; applyLayerToggles(); }
+      flashLayer(k);
+      engineStatus.textContent = `L${k === 'cloud' ? '3' : '4'} に ${file.name} を読み込みました`;
+    } catch(err) {
+      console.error(err);
+      nameEl.textContent = '(load failed)';
+      alert(`サンプル読み込みに失敗しました: ${err.message}`);
+    }
+  });
+}
+
+function flashLayer(layerKey) {
+  const el = document.querySelector(`.layer[data-layer="${layerKey}"]`);
+  if (!el) return;
+  el.style.transition = 'background 0.3s';
+  const orig = el.style.background;
+  el.style.background = 'rgba(122, 204, 122, 0.25)';
+  setTimeout(() => { el.style.background = orig; }, 600);
+}
+
+wireLiveParams();
+
+// ========================================================================
+// Step 2B: LFO (parameter modulation)
+// ========================================================================
+
+// ターゲット可能なスライダーIDと表示名のマップ
+// (LFO は対応するスライダーの値に加算して input イベントを発火させる)
+// optgroup で描画できるようカテゴリごとに束ねる。
+const LFO_TARGET_GROUPS = [
+  {
+    group: null, // グループなし (off)
+    items: [
+      { id: 'none', label: '— off —' },
+    ],
+  },
+  {
+    group: 'MASTER',
+    items: [
+      { id: 'm-filter',       label: 'filter freq' },
+      { id: 'm-reverb',       label: 'reverb wet' },
+      { id: 'm-reverb-decay', label: 'reverb decay' },
+      { id: 'm-gain',         label: 'gain' },
+      { id: 'm-delay-wet',    label: 'delay wet' },
+      { id: 'm-delay-time',   label: 'delay time' },
+      { id: 'm-delay-fb',     label: 'delay feedback' },
+      { id: 'm-chorus-wet',   label: 'chorus wet' },
+      { id: 'm-chorus-rate',  label: 'chorus rate' },
+      { id: 'm-chorus-depth', label: 'chorus depth' },
+      { id: 'm-phaser-wet',   label: 'phaser wet' },
+      { id: 'm-phaser-rate',  label: 'phaser rate' },
+      { id: 'm-phaser-q',     label: 'phaser Q' },
+    ],
+  },
+  {
+    group: 'L1 DRONE',
+    items: [
+      { id: 'ly-drone-gain',    label: 'gain' },
+      { id: 'ly-drone-density', label: 'density' },
+      { id: 'ly-drone-voice',   label: 'voice len' },
+    ],
+  },
+  {
+    group: 'L3 CLOUD',
+    items: [
+      { id: 'ly-cloud-gain',    label: 'gain' },
+      { id: 'ly-cloud-gsize',   label: 'grain size' },
+      { id: 'ly-cloud-overlap', label: 'overlap' },
+      { id: 'ly-cloud-rate',    label: 'playback rate' },
+      { id: 'ly-cloud-detune',  label: 'detune' },
+    ],
+  },
+  {
+    group: 'L4 CLASSIC',
+    items: [
+      { id: 'ly-classic-gain',    label: 'gain' },
+      { id: 'ly-classic-gsize',   label: 'grain size' },
+      { id: 'ly-classic-overlap', label: 'overlap' },
+      { id: 'ly-classic-rate',    label: 'playback rate' },
+      { id: 'ly-classic-detune',  label: 'detune' },
+    ],
+  },
+  {
+    group: 'LFO',
+    items: [
+      { id: 'lfo-1-rate',  label: 'LFO 1 rate' },
+      { id: 'lfo-1-depth', label: 'LFO 1 depth' },
+      { id: 'lfo-2-rate',  label: 'LFO 2 rate' },
+      { id: 'lfo-2-depth', label: 'LFO 2 depth' },
+      { id: 'lfo-3-rate',  label: 'LFO 3 rate' },
+      { id: 'lfo-3-depth', label: 'LFO 3 depth' },
+      { id: 'lfo-4-rate',  label: 'LFO 4 rate' },
+      { id: 'lfo-4-depth', label: 'LFO 4 depth' },
+    ],
+  },
+];
+
+// <select> 用に optgroup 化した HTML を返す
+function renderLFOTargetOptions(selectedId) {
+  const parts = [];
+  for (const g of LFO_TARGET_GROUPS) {
+    const opts = g.items
+      .map(it => `<option value="${it.id}"${it.id === selectedId ? ' selected' : ''}>${it.label}</option>`)
+      .join('');
+    if (g.group) {
+      parts.push(`<optgroup label="${g.group}">${opts}</optgroup>`);
+    } else {
+      parts.push(opts);
+    }
+  }
+  return parts.join('');
+}
+
+const LFO_SHAPES = ['sine','triangle','square','saw','random','smooth-random'];
+
+const lfos = [
+  { id: 1, on: false, rate: 0.3, shape: 'sine', depth: 0.3, target: 'none', phase: 0, lastVal: 0, baseline: null, baselineStr: null, lastRand: 0, nextRand: 0, randPhase: 0 },
+  { id: 2, on: false, rate: 0.2, shape: 'triangle', depth: 0.3, target: 'none', phase: 0, lastVal: 0, baseline: null, baselineStr: null, lastRand: 0, nextRand: 0, randPhase: 0 },
+  { id: 3, on: false, rate: 0.5, shape: 'sine', depth: 0.2, target: 'none', phase: 0, lastVal: 0, baseline: null, baselineStr: null, lastRand: 0, nextRand: 0, randPhase: 0 },
+  { id: 4, on: false, rate: 0.1, shape: 'smooth-random', depth: 0.4, target: 'none', phase: 0, lastVal: 0, baseline: null, baselineStr: null, lastRand: 0, nextRand: 0, randPhase: 0 },
+];
+
+function buildLFOUI() {
+  const root = document.getElementById('lfoList');
+  root.innerHTML = '';
+  for (const lfo of lfos) {
+    const row = document.createElement('div');
+    row.className = 'lfo-row';
+    row.dataset.lfoId = lfo.id;
+    row.innerHTML = `
+      <span class="lfo-num">LFO ${lfo.id}</span>
+      <label><input type="checkbox" data-lfo-on="${lfo.id}" ${lfo.on ? 'checked' : ''}></label>
+      <label>rate <input type="range" data-lfo-rate="${lfo.id}" min="0.01" max="5" step="0.01" value="${lfo.rate}"> <span data-lfo-rate-val="${lfo.id}">${lfo.rate.toFixed(2)}Hz</span></label>
+      <div class="lfo-viz" data-lfo-viz="${lfo.id}"></div>
+      <label>shape
+        <select data-lfo-shape="${lfo.id}">
+          ${LFO_SHAPES.map(s => `<option value="${s}" ${s === lfo.shape ? 'selected' : ''}>${s}</option>`).join('')}
+        </select>
+      </label>
+      <label>depth <input type="range" data-lfo-depth="${lfo.id}" min="0" max="1" step="0.01" value="${lfo.depth}"></label>
+      <label style="grid-column: 3 / -1">target
+        <select data-lfo-target="${lfo.id}">
+          ${renderLFOTargetOptions(lfo.target)}
+        </select>
+      </label>
+    `;
+    root.appendChild(row);
+  }
+
+  // イベント接続
+  for (const lfo of lfos) {
+    document.querySelector(`[data-lfo-on="${lfo.id}"]`).addEventListener('change', e => {
+      lfo.on = e.target.checked;
+      updateLFORowState(lfo);
+      if (lfo.on) captureBaseline(lfo);
+      else restoreBaseline(lfo);
+    });
+    document.querySelector(`[data-lfo-rate="${lfo.id}"]`).addEventListener('input', e => {
+      lfo.rate = parseFloat(e.target.value);
+      document.querySelector(`[data-lfo-rate-val="${lfo.id}"]`).textContent = lfo.rate.toFixed(2) + 'Hz';
+    });
+    document.querySelector(`[data-lfo-shape="${lfo.id}"]`).addEventListener('change', e => {
+      lfo.shape = e.target.value;
+    });
+    document.querySelector(`[data-lfo-depth="${lfo.id}"]`).addEventListener('input', e => {
+      lfo.depth = parseFloat(e.target.value);
+    });
+    document.querySelector(`[data-lfo-target="${lfo.id}"]`).addEventListener('change', e => {
+      if (lfo.on) restoreBaseline(lfo);
+      lfo.target = e.target.value;
+      if (lfo.on) captureBaseline(lfo);
+    });
+  }
+}
+
+// target id が LFO の rate/depth を指しているかどうかを判定
+// フォーマット: 'lfo-<id>-rate' / 'lfo-<id>-depth'
+function parseLFOTargetId(targetId) {
+  const m = /^lfo-(\d+)-(rate|depth)$/.exec(targetId);
+  if (!m) return null;
+  return { lfoId: parseInt(m[1], 10), param: m[2] };
+}
+
+// LFO parameter の値レンジ (rate / depth) を返す。DOM スライダーの min/max と相当
+function lfoParamRange(param) {
+  if (param === 'rate')  return { min: 0.01, max: 5 };
+  if (param === 'depth') return { min: 0,    max: 1 };
+  return null;
+}
+
+function getLFOParam(lfoId, param) {
+  const lfo = lfos.find(l => l.id === lfoId);
+  return lfo ? lfo[param] : null;
+}
+
+function setLFOParam(lfoId, param, value) {
+  const lfo = lfos.find(l => l.id === lfoId);
+  if (!lfo) return;
+  lfo[param] = value;
+  // UI 同期: 対応する slider / val を更新 (rate はラベルも更新)
+  const slider = document.querySelector(`[data-lfo-${param}="${lfoId}"]`);
+  if (slider) slider.value = value;
+  if (param === 'rate') {
+    const label = document.querySelector(`[data-lfo-rate-val="${lfoId}"]`);
+    if (label) label.textContent = value.toFixed(2) + 'Hz';
+  }
+}
+
+function updateLFORowState(lfo) {
+  const row = document.querySelector(`.lfo-row[data-lfo-id="${lfo.id}"]`);
+  if (row) row.classList.toggle('active', lfo.on);
+}
+
+// ターゲット変更時に、元のスライダー値を保存
+function captureBaseline(lfo) {
+  if (lfo.target === 'none') { lfo.baseline = null; return; }
+  // LFO パラメータターゲット
+  const lfoRef = parseLFOTargetId(lfo.target);
+  if (lfoRef) {
+    const v = getLFOParam(lfoRef.lfoId, lfoRef.param);
+    if (v === null) { lfo.baseline = null; return; }
+    lfo.baseline = v;
+    lfo.baselineStr = null;
+    return;
+  }
+  const el = document.getElementById(lfo.target);
+  if (!el) { lfo.baseline = null; return; }
+  lfo.baseline = parseFloat(el.value);
+  lfo.baselineStr = el.value;
+}
+
+// ターゲットを元に戻す　(OFF 時に呼ばれる)
+function restoreBaseline(lfo) {
+  if (lfo.baseline === null || lfo.target === 'none') return;
+  const lfoRef = parseLFOTargetId(lfo.target);
+  if (lfoRef) {
+    setLFOParam(lfoRef.lfoId, lfoRef.param, lfo.baseline);
+    lfo.baseline = null;
+    lfo.baselineStr = null;
+    return;
+  }
+  const el = document.getElementById(lfo.target);
+  if (!el) return;
+  el.value = lfo.baselineStr !== null ? lfo.baselineStr : lfo.baseline;
+  el.dispatchEvent(new Event('input'));
+  lfo.baseline = null;
+  lfo.baselineStr = null;
+}
+
+// 60fps で LFO を進めてターゲット値を更新
+const LFO_INTERVAL = 1 / 60;
+let lastLFOTime = performance.now() / 1000;
+function tickLFOs() {
+  const now = performance.now() / 1000;
+  const dt = now - lastLFOTime;
+  lastLFOTime = now;
+
+  for (const lfo of lfos) {
+    if (!lfo.on || lfo.target === 'none' || lfo.baseline === null) continue;
+    lfo.phase += dt * lfo.rate;
+    lfo.phase = lfo.phase % 1;
+    const v = computeLFOValue(lfo, dt);
+    lfo.lastVal = v;
+    applyLFOToTarget(lfo, v);
+    updateLFOViz(lfo, v);
+  }
+
+  requestAnimationFrame(tickLFOs);
+}
+
+function computeLFOValue(lfo, dt) {
+  // -1..1 の範囲で返す
+  const p = lfo.phase;
+  switch (lfo.shape) {
+    case 'sine':     return Math.sin(p * 2 * Math.PI);
+    case 'triangle': return p < 0.5 ? (p * 4 - 1) : (3 - p * 4);
+    case 'square':   return p < 0.5 ? 1 : -1;
+    case 'saw':      return p * 2 - 1;
+    case 'random': {
+      // 新しい周期ごとにランダム値を更新
+      lfo.randPhase += dt * lfo.rate;
+      if (lfo.randPhase >= 1) {
+        lfo.randPhase = 0;
+        lfo.lastRand = Math.random() * 2 - 1;
+      }
+      return lfo.lastRand;
+    }
+    case 'smooth-random': {
+      // ランダム値間を補間
+      lfo.randPhase += dt * lfo.rate;
+      if (lfo.randPhase >= 1) {
+        lfo.randPhase -= 1;
+        lfo.lastRand = lfo.nextRand;
+        lfo.nextRand = Math.random() * 2 - 1;
+      }
+      const t = lfo.randPhase;
+      // コサイン補間
+      const tt = (1 - Math.cos(t * Math.PI)) / 2;
+      return lfo.lastRand * (1 - tt) + lfo.nextRand * tt;
+    }
+  }
+  return 0;
+}
+
+function applyLFOToTarget(lfo, value) {
+  // LFO パラメータターゲット (LFO on LFO)
+  const lfoRef = parseLFOTargetId(lfo.target);
+  if (lfoRef) {
+    // 自己参照は無効 (UI で選択できても何もしない)
+    if (lfoRef.lfoId === lfo.id) return;
+    const range = lfoParamRange(lfoRef.param);
+    if (!range) return;
+    const span = range.max - range.min;
+    const delta = value * lfo.depth * (span * 0.5);
+    let newVal = lfo.baseline + delta;
+    if (newVal < range.min) newVal = range.min;
+    if (newVal > range.max) newVal = range.max;
+    setLFOParam(lfoRef.lfoId, lfoRef.param, newVal);
+    return;
+  }
+
+  const el = document.getElementById(lfo.target);
+  if (!el) return;
+  const min = parseFloat(el.min);
+  const max = parseFloat(el.max);
+  const range = max - min;
+  // 深さ10でスライダー範囲の半分を挖る
+  const delta = value * lfo.depth * (range * 0.5);
+  let newVal = lfo.baseline + delta;
+  if (newVal < min) newVal = min;
+  if (newVal > max) newVal = max;
+  el.value = newVal;
+  el.dispatchEvent(new Event('input'));
+}
+
+function updateLFOViz(lfo, value) {
+  const viz = document.querySelector(`[data-lfo-viz="${lfo.id}"]`);
+  if (!viz) return;
+  // value is -1..1, map to 0..100%
+  const pos = ((value + 1) / 2) * 100;
+  viz.style.setProperty('--pos', pos + '%');
+  // ::after は直接見えないので、子要素なしに CSS 変数で移動を2 次元ヹクターで対応
+  // 簡易に、inner span を動かす方針で style.left を書き換える
+  // しかし CSS で::after使ったので、代わりに background-position で grad 表現
+  viz.style.background = `linear-gradient(to right, transparent ${Math.max(0,pos-4)}%, #d4a574 ${pos}%, transparent ${Math.min(100,pos+4)}%), #2a2a35`;
+}
+
+// LFO UI を起動時に一回構築
+buildLFOUI();
+requestAnimationFrame(tickLFOs);
+
+console.log('✒️ Compound Eye Studio loaded. Step 2: sound engine ready.');
+</script>
+
+</body>
+</html>

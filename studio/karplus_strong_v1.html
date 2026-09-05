@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>Karplus-Strong v1</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #222; color: #eee; padding: 40px; }
+  h1 { font-size: 20px; }
+  .keys { display: flex; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
+  .key {
+    padding: 20px 16px;
+    background: #444;
+    border: 1px solid #666;
+    color: #eee;
+    font-size: 14px;
+    cursor: pointer;
+    user-select: none;
+    border-radius: 4px;
+  }
+  .key:active, .key.active { background: #8a8; }
+  label { display: block; margin-top: 16px; font-size: 13px; color: #aaa; }
+  input[type=range] { width: 300px; }
+  .note { margin-top: 20px; font-size: 12px; color: #888; }
+</style>
+</head>
+<body>
+
+<h1>Karplus-Strong (弦モデル) — v1</h1>
+<p>キーを押す、またはPCキーボードで演奏。ホワイトノイズを短時間ディレイラインに流し、フィードバックループで徐々に減衰する弦の振動を再現。</p>
+
+<div class="keys" id="keys"></div>
+
+<label>Damping (弦の減衰率、高い方が長く響く): <span id="dampLabel">0.995</span></label>
+<input type="range" id="damp" min="0.90" max="0.999" step="0.001" value="0.995">
+
+<label>Brightness (高音の明るさ、低い方がこもった音): <span id="briLabel">0.5</span></label>
+<input type="range" id="bri" min="0.0" max="1.0" step="0.01" value="0.5">
+
+<label>Excitation (ピック強度、短いほど硬い音): <span id="exLabel">5 ms</span></label>
+<input type="range" id="ex" min="1" max="30" step="1" value="5">
+
+<p class="note">キーボード: Z S X D C V G B H N J M = C3〜B3 半音階</p>
+
+<script>
+// -------------------------------
+// Karplus-Strong 単一弦
+// -------------------------------
+const ctx = new (window.AudioContext || window.webkitAudioContext)();
+const sr = ctx.sampleRate;
+
+// コントロール
+let damping = 0.995;
+let brightness = 0.5;
+let excitationMs = 5;
+
+document.getElementById('damp').addEventListener('input', e => {
+  damping = parseFloat(e.target.value);
+  document.getElementById('dampLabel').textContent = damping.toFixed(3);
+});
+document.getElementById('bri').addEventListener('input', e => {
+  brightness = parseFloat(e.target.value);
+  document.getElementById('briLabel').textContent = brightness.toFixed(2);
+});
+document.getElementById('ex').addEventListener('input', e => {
+  excitationMs = parseInt(e.target.value);
+  document.getElementById('exLabel').textContent = excitationMs + ' ms';
+});
+
+// 単音発音
+function pluck(freq) {
+  if (ctx.state === 'suspended') ctx.resume();
+
+  const delayLen = Math.max(2, Math.round(sr / freq));
+  // 励起: excitationMs 分のホワイトノイズ、その後無音
+  const excitationSamples = Math.max(1, Math.round(sr * excitationMs / 1000));
+  const bufferLen = delayLen;
+  const buf = new Float32Array(bufferLen);
+  for (let i = 0; i < Math.min(excitationSamples, bufferLen); i++) {
+    buf[i] = (Math.random() * 2 - 1);
+  }
+
+  // ScriptProcessor ではなく AudioWorklet を使いたいが、まずは簡素に OfflineAudioContext 不要の逐次処理を
+  // AudioBufferSourceNode で再生用バッファを事前計算する
+  const totalSec = 6; // 最大6秒鳴らす
+  const totalSamples = Math.floor(sr * totalSec);
+  const outBuf = ctx.createBuffer(1, totalSamples, sr);
+  const out = outBuf.getChannelData(0);
+
+  // Karplus-Strong 本体: ディレイライン+ローパス+減衰のフィードバック
+  const line = buf.slice(); // 初期状態
+  let prevSample = 0;
+  // ローパス (1ポール): y[n] = (1 - a) * x[n] + a * y[n-1]
+  // brightness が高いほど a が小さい（高音を通す）
+  const lpCoef = 1.0 - brightness; // 0.0 (明るい) .. 1.0 (こもる)
+
+  for (let n = 0; n < totalSamples; n++) {
+    const idx = n % delayLen;
+    const current = line[idx];
+    // ローパス（前サンプルとの加重平均）
+    const filtered = (1.0 - lpCoef) * current + lpCoef * prevSample;
+    prevSample = filtered;
+    // 減衰
+    const nextSample = filtered * damping;
+    out[n] = current;
+    // ディレイラインを更新（フィードバック書き戻し）
+    line[idx] = nextSample;
+  }
+
+  const src = ctx.createBufferSource();
+  src.buffer = outBuf;
+  const gain = ctx.createGain();
+  gain.gain.value = 0.5;
+  src.connect(gain).connect(ctx.destination);
+  src.start();
+  src.onended = () => { src.disconnect(); gain.disconnect(); };
+}
+
+// -------------------------------
+// UI: 半音階キー
+// -------------------------------
+const midiToFreq = m => 440 * Math.pow(2, (m - 69) / 12);
+const notes = [
+  { midi: 48, label: 'C3', key: 'z' },
+  { midi: 49, label: 'C#3', key: 's' },
+  { midi: 50, label: 'D3', key: 'x' },
+  { midi: 51, label: 'D#3', key: 'd' },
+  { midi: 52, label: 'E3', key: 'c' },
+  { midi: 53, label: 'F3', key: 'v' },
+  { midi: 54, label: 'F#3', key: 'g' },
+  { midi: 55, label: 'G3', key: 'b' },
+  { midi: 56, label: 'G#3', key: 'h' },
+  { midi: 57, label: 'A3', key: 'n' },
+  { midi: 58, label: 'A#3', key: 'j' },
+  { midi: 59, label: 'B3', key: 'm' },
+  { midi: 60, label: 'C4', key: ',' }
+];
+
+const keysDiv = document.getElementById('keys');
+notes.forEach(n => {
+  const b = document.createElement('div');
+  b.className = 'key';
+  b.textContent = `${n.label} (${n.key})`;
+  b.addEventListener('mousedown', () => pluck(midiToFreq(n.midi)));
+  keysDiv.appendChild(b);
+});
+
+// キーボード入力
+document.addEventListener('keydown', e => {
+  if (e.repeat) return;
+  const note = notes.find(n => n.key === e.key.toLowerCase());
+  if (note) pluck(midiToFreq(note.midi));
+});
+</script>
+
+</body>
+</html>
